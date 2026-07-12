@@ -631,6 +631,7 @@ html, body {
 .host-score-box {
     flex: 1;
     min-width: 100px;
+    flex-shrink: 0;
     background: var(--bg-color);
     border-radius: 8px;
     padding: 0.5rem;

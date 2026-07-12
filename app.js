@@ -21,6 +21,7 @@ let currentRoomCode = null;
 let currentRole = null; // 'host', 'display', 'player'
 let playerId = null;
 let hostId = null;
+let pendingRevealRow = -1;
 
 // DOM Elements - General
 const views = {
@@ -607,7 +608,6 @@ function attachHostListeners() {
 
     // Reveal flow
     document.getElementById('close-reveal-modal').onclick = () => document.getElementById('reveal-modal').classList.remove('active');
-    let pendingRevealRow = -1;
 
     document.getElementById('confirm-reveal-btn').onclick = async () => {
         const team = document.getElementById('reveal-team-select').value;
