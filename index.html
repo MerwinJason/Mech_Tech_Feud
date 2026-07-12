@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 MechTechFeud</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Firebase SDK (v10+) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+</head>
+<body>
+    <div class="background-orbs"></div>
+
+    <main id="app-container">
+
+        <!-- 1. LANDING VIEW -->
+        <div id="landing-view" class="view active">
+            <h1 class="main-title">🎯 MechTechFeud</h1>
+            <p class="subtitle">Family Feud, but for tech teams</p>
+            <div class="button-group">
+                <button id="host-btn" class="btn btn-cyan">🎤 Host a Room</button>
+                <button id="display-btn" class="btn btn-yellow">📺 Open Display</button>
+                <button id="join-btn" class="btn btn-pink">🎮 Join as Player</button>
+            </div>
+        </div>
+
+        <!-- 2. HOST VIEW -->
+        <div id="host-view" class="view">
+            <!-- 2a. Host Setup Screen -->
+            <div id="host-setup" class="host-container">
+                <h2>🎤 Host a Room</h2>
+                
+                <div class="setup-section">
+                    <h3>1. Upload Questions</h3>
+                    <div class="upload-controls">
+                        <button id="download-template-btn" class="btn btn-gray">📥 Download Template</button>
+                        <input type="file" id="excel-upload" accept=".xlsx, .xls" class="hidden">
+                        <label for="excel-upload" class="btn btn-cyan">📤 Upload Questions</label>
+                    </div>
+                    <div id="upload-status" class="status-msg"></div>
+                    <div id="questions-preview" class="hidden">
+                        <h4>Preview:</h4>
+                        <ul id="preview-list"></ul>
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>2. Team Setup</h3>
+                    <p class="help-text">Click to disable teams you won't use.</p>
+                    <div class="team-chips" id="setup-team-chips">
+                        <!-- Chips generated via JS -->
+                    </div>
+                </div>
+
+                <button id="open-lobby-btn" class="btn btn-green" disabled>🚀 Open Lobby</button>
+            </div>
+
+            <!-- 2b. Host Control Panel -->
+            <div id="host-dashboard" class="hidden">
+                <header class="host-header">
+                    <div class="room-info">
+                        Room: <span id="host-room-code" class="code-highlight"></span>
+                        <button id="copy-room-code-btn" class="btn-icon" title="Copy Code">📋</button>
+                        <button id="qr-code-btn" class="btn-icon" title="Show QR Code">📱</button>
+                    </div>
+                    <div class="question-info" id="host-question-counter">Q- of -</div>
+                    <div class="host-controls">
+                        <label>🔔 Buzzers:</label>
+                        <select id="buzzer-master-toggle" class="select-dropdown">
+                            <option value="off">OFF</option>
+                            <option value="all">ON — All Players</option>
+                            <option value="selected">ON — Selected Players</option>
+                        </select>
+                        <button id="settings-btn" class="btn-icon" title="Settings">⚙️</button>
+                    </div>
+                </header>
+                
+                <div class="host-main">
+                    <!-- Left Column: The Board -->
+                    <div class="host-board-col">
+                        <div class="current-question-text" id="host-question-text">Waiting for question...</div>
+                        
+                        <div id="host-board" class="host-board">
+                            <!-- Rows generated by JS -->
+                        </div>
+
+                        <div class="board-controls">
+                            <button id="prev-q-btn" class="btn btn-gray">◀ Prev Q</button>
+                            <button id="intro-round-btn" class="btn btn-cyan hidden">🎬 Introduce Round</button>
+                            <button id="next-q-btn" class="btn btn-gray">Next Q ▶</button>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Teams & Strikes -->
+                    <div class="host-team-col">
+                        <div class="strike-zone">
+                            <div class="strike-display" id="host-strikes">
+                                <span class="strike-icon empty">⚪</span>
+                                <span class="strike-icon empty">⚪</span>
+                                <span class="strike-icon empty">⚪</span>
+                            </div>
+                            <div class="strike-actions">
+                                <button id="add-strike-btn" class="btn btn-red">❌ STRIKE</button>
+                            </div>
+                        </div>
+
+                        <div class="steal-zone hidden" id="steal-zone">
+                            <button id="start-steal-btn" class="btn btn-yellow">🎯 START STEAL</button>
+                            <button id="end-steal-btn" class="btn btn-gray hidden">Cancel Steal</button>
+                        </div>
+                        
+                        <div class="current-team-control">
+                            <label>CURRENT TEAM:</label>
+                            <select id="current-team-select" class="select-dropdown big">
+                                <!-- Options populated by JS -->
+                            </select>
+                        </div>
+                        
+                        <div class="roster-header">
+                            <h3>TEAM ROSTER</h3>
+                        </div>
+                        <div id="host-roster" class="roster-list">
+                            <!-- Roster generated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Bar: Scoreboard -->
+                <footer class="host-scoreboard" id="host-live-scores">
+                    <!-- Scores generated by JS -->
+                </footer>
+            </div>
+        </div>
+
+        <!-- 3. DISPLAY VIEW -->
+        <div id="display-view" class="view">
+            <!-- Mode A: Intro -->
+            <div id="display-mode-intro" class="display-mode hidden">
+                <h1 id="intro-q-number" class="huge-text slide-in"></h1>
+                <h2 id="intro-q-text" class="typewriter-text"></h2>
+                <div class="pulse-text">Ready?</div>
+            </div>
+
+            <!-- Mode B: Board -->
+            <div id="display-mode-board" class="display-mode hidden">
+                <div class="display-header">
+                    <div id="display-question" class="glowing-card"></div>
+                </div>
+                
+                <div class="display-main">
+                    <div id="display-board-container" class="board-container">
+                        <!-- Grid auto-layout populated by JS -->
+                    </div>
+                    
+                    <div id="display-sidebar" class="sidebar-scoreboard">
+                        <!-- Sidebar scores populated by JS -->
+                    </div>
+                </div>
+
+                <div id="display-strikes-overlay" class="strikes-overlay hidden">
+                    <!-- Dynamic strikes -->
+                </div>
+            </div>
+
+            <!-- Mode C: Steal -->
+            <div id="display-mode-steal" class="display-mode hidden">
+                <h1 class="huge-text steal-text">🎯 THE STEAL</h1>
+                <h2 id="steal-team-name" class="huge-team-text"></h2>
+                <p>One guess for all the points</p>
+            </div>
+
+            <!-- Mode D: Highlights -->
+            <div id="display-mode-highlights" class="display-mode hidden">
+                <h1 class="huge-text slide-in">🎆 GAME OVER 🎆</h1>
+                
+                <div class="podium-container" id="podium-container">
+                    <!-- Podium generated by JS -->
+                </div>
+
+                <div class="highlights-carousel" id="highlights-carousel">
+                    <!-- Highlights cycle here -->
+                </div>
+            </div>
+            
+            <div id="display-volume" class="volume-control">🔊</div>
+        </div>
+
+        <!-- 4. PLAYER VIEW -->
+        <div id="player-view" class="view">
+            <div id="player-passive" class="player-container hidden">
+                <div class="player-info-card">
+                    <p>You are on <strong id="passive-team-name"></strong></p>
+                    <div class="passive-score" id="passive-score-display">0</div>
+                </div>
+                <div class="mini-scoreboard" id="mini-scoreboard">
+                    <!-- Populated by JS -->
+                </div>
+                <p class="watch-screen-msg">Watch the big screen for questions 👀</p>
+            </div>
+
+            <div id="player-buzzer-screen" class="player-container hidden">
+                <header class="player-header">
+                    <div id="player-info-display"></div>
+                </header>
+                <div class="buzzer-wrapper">
+                    <button id="buzzer-button" class="disarmed">
+                        <span id="buzzer-label">Waiting for host...</span>
+                        <span id="buzzer-rank"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODALS -->
+    <div id="join-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-join-modal">&times;</span>
+            <h3 id="join-modal-title">Join Room</h3>
+            <p id="join-error-msg" class="error-text"></p>
+            <input type="text" id="join-room-input" placeholder="6-Digit Room Code" maxlength="6" autocomplete="off">
+            <div id="player-join-fields" class="hidden">
+                <input type="text" id="player-name-input" placeholder="Your Name" maxlength="20" autocomplete="off" style="margin-top: 1rem;">
+                <select id="player-team-select" class="select-dropdown" style="margin-top: 1rem; width: 100%; padding: 0.8rem;">
+                    <option value="" disabled selected>Select Team</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <button id="submit-join-btn" class="btn btn-pink" style="margin-top: 1rem;">Continue</button>
+        </div>
+    </div>
+
+    <div id="qr-code-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-qr-modal">&times;</span>
+            <h3>Scan to Join</h3>
+            <canvas id="qr-code-img"></canvas>
+            <p id="qr-join-link"></p>
+        </div>
+    </div>
+
+    <!-- Host Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-settings-modal">&times;</span>
+            <h3>Settings</h3>
+            <div class="settings-actions">
+                <button id="end-game-btn" class="btn btn-red">End Game & Show Highlights</button>
+                <button id="dl-csv-btn" class="btn btn-gray">Download Score CSV</button>
+                <button id="dl-screenshot-btn" class="btn btn-cyan">Save Highlights PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reveal Modal (Host) -->
+    <div id="reveal-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-reveal-modal">&times;</span>
+            <h3 id="reveal-modal-title">Reveal Row</h3>
+            <p>Which team gets the points?</p>
+            <select id="reveal-team-select" class="select-dropdown" style="margin: 1rem 0; width: 100%; padding: 0.8rem;">
+                <!-- Populated by JS -->
+            </select>
+            <button id="confirm-reveal-btn" class="btn btn-green">✓ Confirm & Award Points</button>
+            <button id="reveal-only-btn" class="btn btn-gray" style="margin-top: 0.5rem;">Reveal Only (No Points)</button>
+        </div>
+    </div>
+
+    <!-- Steal Team Selection Modal (Host) -->
+    <div id="steal-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-steal-modal">&times;</span>
+            <h3>Who is stealing?</h3>
+            <select id="steal-target-select" class="select-dropdown" style="margin: 1rem 0; width: 100%; padding: 0.8rem;">
+                <!-- Populated by JS -->
+            </select>
+            <button id="confirm-steal-btn" class="btn btn-yellow">Start Steal!</button>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
