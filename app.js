@@ -461,29 +461,35 @@ async function openLobby() {
     });
 
     const roomRef = database.ref(`feud-rooms/${currentRoomCode}`);
-    await roomRef.set({
-        createdAt: firebase.database.ServerValue.TIMESTAMP,
-        hostId: hostId,
-        status: "playing",
-        questions: parsedQuestions,
-        currentQuestionIdx: 0,
-        displayMode: "intro",
-        teams: teams,
-        gameState: {
-            currentTeam: Object.keys(teams).find(k => teams[k].enabled) || 'A',
-            strikes: 0,
-            buzzerMode: 'off',
-            stealActive: false,
-            stealingTeam: null
-        },
-        revealed: {},
-        buzzes: {},
-        history: []
-    });
+    
+    try {
+        await roomRef.set({
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            hostId: hostId,
+            status: "playing",
+            questions: parsedQuestions,
+            currentQuestionIdx: 0,
+            displayMode: "intro",
+            teams: teams,
+            gameState: {
+                currentTeam: Object.keys(teams).find(k => teams[k].enabled) || 'A',
+                strikes: 0,
+                buzzerMode: 'off',
+                stealActive: false,
+                stealingTeam: null
+            },
+            revealed: {},
+            buzzes: {},
+            history: []
+        });
 
-    document.getElementById('host-setup').classList.add('hidden');
-    document.getElementById('host-dashboard').classList.remove('hidden');
-    attachHostListeners();
+        document.getElementById('host-setup').classList.add('hidden');
+        document.getElementById('host-dashboard').classList.remove('hidden');
+        attachHostListeners();
+    } catch (error) {
+        console.error("Firebase write error:", error);
+        alert("Failed to create the room. Have you updated the Realtime Database rules in Firebase to allow access to 'feud-rooms'?\n\nError: " + error.message);
+    }
 }
 
 function attachHostListeners() {
