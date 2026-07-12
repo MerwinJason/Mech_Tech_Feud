@@ -531,10 +531,11 @@ function attachHostListeners() {
     };
     
     document.getElementById('intro-round-btn').onclick = () => {
-        roomRef.update({ displayMode: 'intro' });
-        setTimeout(() => {
+        if (localGameState.displayMode === 'intro') {
             roomRef.update({ displayMode: 'board' });
-        }, 4000);
+        } else {
+            roomRef.update({ displayMode: 'intro' });
+        }
     };
 
     document.getElementById('buzzer-master-toggle').onchange = (e) => {
@@ -590,6 +591,7 @@ function attachHostListeners() {
         roomRef.update({
             'gameState/stealActive': true,
             'gameState/stealingTeam': stealingTeam,
+            'gameState/currentTeam': stealingTeam, // Auto set current team
             displayMode: 'steal'
         });
         document.getElementById('steal-modal').classList.remove('active');
@@ -747,6 +749,13 @@ function renderHostDashboard(data) {
     const introBtn = document.getElementById('intro-round-btn');
     if (Object.keys(data.revealed || {}).filter(k => k.startsWith(`${qIdx+1}_`)).length === 0) {
         introBtn.classList.remove('hidden');
+        if (data.displayMode === 'intro') {
+            introBtn.textContent = '➡ Show Board';
+            introBtn.className = 'btn btn-yellow';
+        } else {
+            introBtn.textContent = '🎬 Introduce Round';
+            introBtn.className = 'btn btn-cyan';
+        }
     } else {
         introBtn.classList.add('hidden');
     }

@@ -503,11 +503,14 @@ html, body {
     flex-grow: 1;
     margin: 0 1rem;
     font-size: 1.2rem;
+    min-width: 0;
+    overflow-wrap: break-word;
 }
 .row-pts {
     font-family: var(--font-heading);
     font-size: 1.2rem;
     color: var(--yellow);
+    flex-shrink: 0;
 }
 .awarded-badge {
     margin-left: 1rem;
@@ -516,6 +519,7 @@ html, body {
     font-size: 0.8rem;
     font-weight: bold;
     color: black;
+    flex-shrink: 0;
 }
 .board-controls {
     display: flex;
@@ -743,7 +747,7 @@ html, body {
     background: var(--card-hidden);
     border: 3px solid var(--border-color);
     border-radius: 12px;
-    height: 100px;
+    min-height: 100px;
     display: flex;
     align-items: center;
     padding: 0 1rem;
@@ -797,12 +801,18 @@ html, body {
     justify-content: center;
     font-family: var(--font-heading);
     font-size: 1.5rem;
+    flex-shrink: 0;
 }
 .row-back .d-text {
     flex: 1;
-    font-size: 2rem;
+    font-size: 1.5rem;
+    line-height: 1.2;
     margin: 0 1.5rem;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow-wrap: break-word;
 }
 .row-back .d-pts {
     font-family: var(--font-heading);
@@ -811,6 +821,7 @@ html, body {
     border: 3px solid var(--yellow);
     padding: 0.5rem 1rem;
     border-radius: 8px;
+    flex-shrink: 0;
 }
 .d-team-badge {
     position: absolute;
