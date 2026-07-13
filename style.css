@@ -161,6 +161,8 @@ html, body {
     display: flex;
     gap: 1.5rem;
     margin-top: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .error-text {
@@ -192,9 +194,10 @@ html, body {
 }
 .main-title {
     font-family: var(--font-heading);
-    font-size: 6rem;
+    font-size: clamp(2.5rem, 10vw, 6rem);
     color: var(--text-primary);
     animation: pulse-glow 4s infinite ease-in-out;
+    word-break: break-word;
 }
 .subtitle {
     font-size: 1.5rem;
