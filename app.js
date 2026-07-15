@@ -22,6 +22,12 @@ let currentRole = null; // 'host', 'display', 'player'
 let playerId = null;
 let hostId = null;
 let pendingRevealRow = -1;
+let lastDisplayMode = null;
+let lastStrikeCount = 0;
+let lastRevealedState = {};
+let lastFirstBuzzTimestamp = null;
+
+const TEAM_COLORS = {};
 
 // DOM Elements - General
 const views = {
@@ -658,6 +664,10 @@ function attachHostListeners() {
     };
     document.getElementById('close-history-modal').onclick = () => document.getElementById('history-modal').classList.remove('active');
 
+    // Settings
+    document.getElementById('settings-btn').onclick = () => document.getElementById('settings-modal').classList.add('active');
+    document.getElementById('close-settings-modal').onclick = () => document.getElementById('settings-modal').classList.remove('active');
+
     // QR Code
     document.getElementById('qr-code-btn').onclick = () => {
         const url = `${window.location.origin}${window.location.pathname}?view=player&room=${currentRoomCode}`;
@@ -994,6 +1004,18 @@ function renderHostDashboard(data) {
                 f2Sel.appendChild(opt3);
             }
         });
+
+        // Prevent selecting the same team
+        f1Sel.onchange = () => {
+            Array.from(f2Sel.options).forEach(opt => {
+                opt.disabled = (opt.value === f1Sel.value);
+            });
+        };
+        f2Sel.onchange = () => {
+            Array.from(f1Sel.options).forEach(opt => {
+                opt.disabled = (opt.value === f2Sel.value);
+            });
+        };
     }
     currentTeamSel.value = data.gameState.currentTeam;
     
@@ -1205,7 +1227,7 @@ function renderDisplay(data) {
 
         const firstBuzz = buzzArr[0];
         
-        if (firstBuzz && (!lastRevealedState.firstBuzz || lastRevealedState.firstBuzz.ts !== firstBuzz.ts)) {
+        if (firstBuzz && firstBuzz.ts !== lastFirstBuzzTimestamp) {
             const p = data.players[firstBuzz.id];
             const t = data.teams[p.team];
             
@@ -1227,11 +1249,11 @@ function renderDisplay(data) {
                 overlay.classList.add('hidden');
             }, 3000);
             
-            lastRevealedState.firstBuzz = firstBuzz;
+            lastFirstBuzzTimestamp = firstBuzz.ts;
         }
     } else {
         overlay.classList.add('hidden');
-        lastRevealedState.firstBuzz = null;
+        lastFirstBuzzTimestamp = null;
     }
 }
 
@@ -1292,15 +1314,19 @@ function renderDisplayBoard(data, qData, qIdx) {
 
 function renderDisplayScores(data) {
     const sidebar = document.getElementById('display-sidebar');
+    const mainContainer = document.querySelector('.display-main');
     sidebar.innerHTML = '';
-    sidebar.className = 'faceoff-score-bar'; // Override sidebar styles to bottom bar
     
     // Filter by faceoff if active
     let displayTeams = Object.keys(data.teams).filter(t => data.teams[t].enabled);
     if (data.gameState.faceoffTeams) {
         displayTeams = data.gameState.faceoffTeams;
+        sidebar.className = 'faceoff-score-bar';
+        mainContainer.style.flexDirection = 'column';
     } else {
         displayTeams = displayTeams.sort((a,b) => (data.teams[b].score || 0) - (data.teams[a].score || 0));
+        sidebar.className = 'sidebar-scoreboard';
+        mainContainer.style.flexDirection = 'row';
     }
         
     displayTeams.forEach((t, idx) => {
@@ -1472,7 +1498,7 @@ function renderPlayer(data) {
         
         if (hasBuzzed) {
             btn.classList.add('buzzed');
-            label.textContent = "BUZZED!";
+            label.innerHTML = `<span style="font-size: 1.5rem; position: absolute; top: 15%;">BUZZED!</span>`;
             btn.style.backgroundColor = tData.color;
             btn.style.color = '#000';
             
