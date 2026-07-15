@@ -538,8 +538,16 @@ function attachHostListeners() {
         }
     };
 
+    document.getElementById('filler-screen-btn').onclick = () => {
+        roomRef.update({ displayMode: 'filler' });
+    };
+
     document.getElementById('buzzer-master-toggle').onchange = (e) => {
         roomRef.update({ 'gameState/buzzerMode': e.target.value, buzzes: null });
+    };
+    
+    document.getElementById('clear-buzz-btn').onclick = () => {
+        roomRef.update({ buzzes: null });
     };
 
     document.getElementById('add-strike-btn').onclick = () => {
@@ -567,6 +575,20 @@ function attachHostListeners() {
 
     document.getElementById('current-team-select').onchange = (e) => {
         roomRef.update({ 'gameState/currentTeam': e.target.value });
+    };
+
+    // Faceoff flow
+    document.getElementById('apply-faceoff-btn').onclick = () => {
+        const t1 = document.getElementById('faceoff-team-1').value;
+        const t2 = document.getElementById('faceoff-team-2').value;
+        if (t1 && t2 && t1 !== t2) {
+            roomRef.update({ 'gameState/faceoffTeams': [t1, t2] });
+        } else {
+            alert("Please select two different teams.");
+        }
+    };
+    document.getElementById('clear-faceoff-btn').onclick = () => {
+        roomRef.update({ 'gameState/faceoffTeams': null });
     };
 
     // Steal flow
@@ -608,6 +630,15 @@ function attachHostListeners() {
         });
     };
 
+    document.getElementById('fail-steal-btn').onclick = () => {
+        // Failed steal, just end steal state. The original team keeps their points.
+        roomRef.update({
+            'gameState/stealActive': false,
+            'gameState/stealingTeam': null,
+        });
+        document.getElementById('fail-steal-btn').classList.add('hidden');
+    };
+
     // Reveal flow
     document.getElementById('close-reveal-modal').onclick = () => document.getElementById('reveal-modal').classList.remove('active');
 
@@ -621,6 +652,12 @@ function attachHostListeners() {
         document.getElementById('reveal-modal').classList.remove('active');
     };
     
+    // History & Scores
+    document.getElementById('history-btn').onclick = () => {
+        openHistoryModal();
+    };
+    document.getElementById('close-history-modal').onclick = () => document.getElementById('history-modal').classList.remove('active');
+
     // QR Code
     document.getElementById('qr-code-btn').onclick = () => {
         const url = `${window.location.origin}${window.location.pathname}?view=player&room=${currentRoomCode}`;
@@ -685,6 +722,159 @@ async function processReveal(rowIdx, teamId) {
     updates['displayMode'] = 'board';
 
     await database.ref(`feud-rooms/${currentRoomCode}`).update(updates);
+}
+
+// History & Scores Modal Logic
+function openHistoryModal() {
+    if (!localGameState) return;
+    const modal = document.getElementById('history-modal');
+    modal.classList.add('active');
+    
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            e.target.classList.add('active');
+            document.getElementById(e.target.dataset.tab).classList.remove('hidden');
+        };
+    });
+
+    renderLiveScoresTab();
+    renderHistoryTab();
+}
+
+function renderLiveScoresTab() {
+    const list = document.getElementById('history-scores-list');
+    list.innerHTML = '';
+    
+    Object.keys(localGameState.teams).filter(t => localGameState.teams[t].enabled).forEach(t => {
+        const team = localGameState.teams[t];
+        const row = document.createElement('div');
+        row.className = 'score-adjust-row';
+        row.style.borderLeftColor = team.color;
+        
+        row.innerHTML = `
+            <div>
+                <strong>${team.name}</strong>
+                <div style="color:var(--text-secondary); font-size:0.9rem;">Current: ${team.score || 0}</div>
+            </div>
+            <div class="score-adjust-controls">
+                <button class="btn btn-gray adjust-btn" data-team="${t}" data-amt="-5">-5</button>
+                <input type="number" class="score-adjust-input" id="score-input-${t}" value="${team.score || 0}">
+                <button class="btn btn-gray adjust-btn" data-team="${t}" data-amt="5">+5</button>
+                <button class="btn btn-cyan save-score-btn" data-team="${t}">Save</button>
+            </div>
+        `;
+        list.appendChild(row);
+    });
+
+    // Event listeners
+    list.querySelectorAll('.adjust-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            const t = e.target.dataset.team;
+            const amt = parseInt(e.target.dataset.amt);
+            const input = document.getElementById(`score-input-${t}`);
+            input.value = parseInt(input.value) + amt;
+        };
+    });
+
+    list.querySelectorAll('.save-score-btn').forEach(btn => {
+        btn.onclick = async (e) => {
+            const t = e.target.dataset.team;
+            const val = parseInt(document.getElementById(`score-input-${t}`).value);
+            if (!isNaN(val)) {
+                await database.ref(`feud-rooms/${currentRoomCode}/teams/${t}/score`).set(val);
+                
+                // Add a manual history entry
+                const historyRef = database.ref(`feud-rooms/${currentRoomCode}/history`).push();
+                historyRef.set({
+                    type: 'manual_edit', 
+                    qnum: 'N/A', 
+                    team: t, 
+                    points: val - (localGameState.teams[t].score || 0), 
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
+                
+                // Keep modal open, it will re-render due to on('value') listener if we re-called render, but we don't automatically
+                // Just flash green
+                e.target.textContent = "Saved!";
+                e.target.classList.replace('btn-cyan', 'btn-green');
+                setTimeout(() => {
+                    e.target.textContent = "Save";
+                    e.target.classList.replace('btn-green', 'btn-cyan');
+                }, 1000);
+            }
+        };
+    });
+}
+
+function renderHistoryTab() {
+    const tbody = document.getElementById('history-tbody');
+    tbody.innerHTML = '';
+    
+    if (localGameState.history) {
+        // Sort newest first
+        const histArr = Object.keys(localGameState.history)
+            .map(k => ({ id: k, ...localGameState.history[k] }))
+            .sort((a,b) => b.timestamp - a.timestamp);
+            
+        histArr.forEach(entry => {
+            const tr = document.createElement('tr');
+            const d = new Date(entry.timestamp);
+            const timeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            
+            let teamCell = entry.team && localGameState.teams[entry.team] ? localGameState.teams[entry.team].name : entry.team;
+            
+            // Allow re-allocation for reveals
+            if (entry.type === 'reveal' && entry.qnum !== 'N/A') {
+                let options = `<option value="">--</option>`;
+                Object.keys(localGameState.teams).filter(t => localGameState.teams[t].enabled).forEach(t => {
+                    const sel = (t === entry.team) ? 'selected' : '';
+                    options += `<option value="${t}" ${sel}>${localGameState.teams[t].name}</option>`;
+                });
+                
+                teamCell = `<select class="history-reallocate-select" data-histid="${entry.id}" data-oldteam="${entry.team}" data-points="${entry.points}">${options}</select>`;
+            }
+            
+            tr.innerHTML = `
+                <td>${timeStr}</td>
+                <td><span class="badge" style="background:var(--surface-color); padding:2px 5px; border-radius:3px;">${entry.type}</span></td>
+                <td>${entry.qnum}</td>
+                <td>${entry.points > 0 ? '+'+entry.points : entry.points}</td>
+                <td>${teamCell}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Re-allocation logic
+        tbody.querySelectorAll('.history-reallocate-select').forEach(sel => {
+            sel.onchange = async (e) => {
+                const histId = e.target.dataset.histid;
+                const oldTeam = e.target.dataset.oldteam;
+                const newTeam = e.target.value;
+                const points = parseInt(e.target.dataset.points);
+                
+                if (oldTeam === newTeam) return;
+
+                const updates = {};
+                // Update history entry
+                updates[`history/${histId}/team`] = newTeam;
+                
+                // Calculate new scores
+                if (oldTeam && localGameState.teams[oldTeam]) {
+                    updates[`teams/${oldTeam}/score`] = (localGameState.teams[oldTeam].score || 0) - points;
+                }
+                if (newTeam && localGameState.teams[newTeam]) {
+                    updates[`teams/${newTeam}/score`] = (localGameState.teams[newTeam].score || 0) + points;
+                }
+                
+                await database.ref(`feud-rooms/${currentRoomCode}`).update(updates);
+            };
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No history yet.</td></tr>';
+    }
 }
 
 function renderHostDashboard(data) {
@@ -788,17 +978,34 @@ function renderHostDashboard(data) {
 
     // Teams Control
     const currentTeamSel = document.getElementById('current-team-select');
+    const f1Sel = document.getElementById('faceoff-team-1');
+    const f2Sel = document.getElementById('faceoff-team-2');
+
     if (currentTeamSel.options.length === 0) {
         Object.keys(data.teams).forEach(t => {
             if (data.teams[t].enabled) {
-                const opt = document.createElement('option');
-                opt.value = t;
-                opt.textContent = data.teams[t].name;
-                currentTeamSel.appendChild(opt);
+                const opt1 = document.createElement('option');
+                opt1.value = t; opt1.textContent = data.teams[t].name;
+                currentTeamSel.appendChild(opt1);
+                
+                const opt2 = opt1.cloneNode(true);
+                const opt3 = opt1.cloneNode(true);
+                f1Sel.appendChild(opt2);
+                f2Sel.appendChild(opt3);
             }
         });
     }
     currentTeamSel.value = data.gameState.currentTeam;
+    
+    if (data.gameState.faceoffTeams) {
+        f1Sel.value = data.gameState.faceoffTeams[0];
+        f2Sel.value = data.gameState.faceoffTeams[1];
+        document.getElementById('apply-faceoff-btn').classList.replace('btn-cyan', 'btn-green');
+        document.getElementById('apply-faceoff-btn').textContent = "Active";
+    } else {
+        document.getElementById('apply-faceoff-btn').classList.replace('btn-green', 'btn-cyan');
+        document.getElementById('apply-faceoff-btn').textContent = "Apply";
+    }
 
     // Roster & Buzzes
     const roster = document.getElementById('host-roster');
@@ -834,6 +1041,33 @@ function renderHostDashboard(data) {
         }
         roster.appendChild(teamDiv);
     });
+
+    // Buzz Order
+    const buzzOrderList = document.getElementById('host-buzz-order');
+    buzzOrderList.innerHTML = '';
+    if (data.buzzes) {
+        const buzzArr = Object.keys(data.buzzes).map(k => ({
+            id: k,
+            ts: data.buzzes[k].timestamp
+        })).sort((a,b) => a.ts - b.ts);
+        
+        buzzArr.forEach((b, idx) => {
+            const p = data.players[b.id];
+            const t = data.teams[p.team];
+            let delta = idx === 0 ? '' : `(+${((b.ts - buzzArr[0].ts)/1000).toFixed(2)}s)`;
+            
+            const entry = document.createElement('div');
+            entry.className = 'buzz-entry';
+            entry.style.borderLeftColor = t.color;
+            entry.innerHTML = `
+                <span><b>#${idx+1}</b> ${p.name} (${t.name})</span>
+                <span style="color:var(--text-secondary)">${delta}</span>
+            `;
+            buzzOrderList.appendChild(entry);
+        });
+    } else {
+        buzzOrderList.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 1rem;">Waiting for buzzes...</div>`;
+    }
 
     // Handle buzz checkbox toggles
     document.querySelectorAll('.buzz-checkbox').forEach(cb => {
@@ -923,6 +1157,10 @@ function renderDisplay(data) {
              document.getElementById('intro-q-number').classList.add('slide-in');
         }
     } 
+    else if (mode === 'filler') {
+        const fillerMode = document.getElementById('display-mode-filler');
+        fillerMode.classList.remove('hidden');
+    }
     else if (mode === 'board') {
         const boardMode = document.getElementById('display-mode-board');
         boardMode.classList.remove('hidden');
@@ -956,6 +1194,45 @@ function renderDisplay(data) {
     }
 
     lastDisplayMode = mode;
+
+    // Buzz Overlay
+    const overlay = document.getElementById('display-buzz-overlay');
+    if (data.buzzes) {
+        const buzzArr = Object.keys(data.buzzes).map(k => ({
+            id: k,
+            ts: data.buzzes[k].timestamp
+        })).sort((a,b) => a.ts - b.ts);
+
+        const firstBuzz = buzzArr[0];
+        
+        if (firstBuzz && (!lastRevealedState.firstBuzz || lastRevealedState.firstBuzz.ts !== firstBuzz.ts)) {
+            const p = data.players[firstBuzz.id];
+            const t = data.teams[p.team];
+            
+            const overlayText = document.getElementById('buzz-overlay-text');
+            overlayText.innerHTML = `🥇 FIRST BUZZ <br><br> <span style="color:${t.color}">${p.name} (${t.name})</span>`;
+            overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
+            overlay.style.boxShadow = `inset 0 0 150px ${t.color}`;
+            overlay.classList.remove('hidden');
+            
+            playDing();
+            
+            // Auto switch current team to the buzzer
+            if (currentRole === 'host') {
+                database.ref(`feud-rooms/${currentRoomCode}`).update({ 'gameState/currentTeam': p.team });
+            }
+
+            // Hide after 3 seconds
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 3000);
+            
+            lastRevealedState.firstBuzz = firstBuzz;
+        }
+    } else {
+        overlay.classList.add('hidden');
+        lastRevealedState.firstBuzz = null;
+    }
 }
 
 function renderDisplayBoard(data, qData, qIdx) {
@@ -1016,12 +1293,18 @@ function renderDisplayBoard(data, qData, qIdx) {
 function renderDisplayScores(data) {
     const sidebar = document.getElementById('display-sidebar');
     sidebar.innerHTML = '';
+    sidebar.className = 'faceoff-score-bar'; // Override sidebar styles to bottom bar
     
-    const sortedTeams = Object.keys(data.teams)
-        .filter(t => data.teams[t].enabled)
-        .sort((a,b) => (data.teams[b].score || 0) - (data.teams[a].score || 0));
+    // Filter by faceoff if active
+    let displayTeams = Object.keys(data.teams).filter(t => data.teams[t].enabled);
+    if (data.gameState.faceoffTeams) {
+        displayTeams = data.gameState.faceoffTeams;
+    } else {
+        displayTeams = displayTeams.sort((a,b) => (data.teams[b].score || 0) - (data.teams[a].score || 0));
+    }
         
-    sortedTeams.forEach(t => {
+    displayTeams.forEach((t, idx) => {
+        if (!data.teams[t]) return;
         const isControl = t === data.gameState.currentTeam;
         const card = document.createElement('div');
         card.className = `side-score-card ${isControl ? 'in-control' : ''}`;
@@ -1034,6 +1317,14 @@ function renderDisplayScores(data) {
             </div>
         `;
         sidebar.appendChild(card);
+        
+        // Add VS divider in face-off mode
+        if (data.gameState.faceoffTeams && idx === 0) {
+            const vs = document.createElement('div');
+            vs.className = 'vs-divider';
+            vs.textContent = 'VS';
+            sidebar.appendChild(vs);
+        }
     });
 }
 
@@ -1131,6 +1422,13 @@ function renderPlayer(data) {
     let showBuzzer = false;
     if (data.gameState.buzzerMode === 'all') showBuzzer = true;
     if (data.gameState.buzzerMode === 'selected' && pData.buzzEligible) showBuzzer = true;
+    
+    // Face-off restriction
+    if (showBuzzer && data.gameState.faceoffTeams) {
+        if (!data.gameState.faceoffTeams.includes(pData.team)) {
+            showBuzzer = false;
+        }
+    }
 
     if (!showBuzzer) {
         // Passive Mode
