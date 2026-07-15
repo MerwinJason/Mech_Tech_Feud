@@ -286,6 +286,14 @@ const TEAM_COLORS = {
     H: { hex: '#FF4444', name: 'Red' }
 };
 
+// Helper: returns only the relevant teams based on face-off mode
+function getActiveTeams(data) {
+    if (data.gameState && data.gameState.faceoffTeams) {
+        return data.gameState.faceoffTeams.filter(t => data.teams[t] && data.teams[t].enabled);
+    }
+    return Object.keys(data.teams).filter(t => data.teams[t].enabled);
+}
+
 // ==========================================
 // HOST LOGIC
 // ==========================================
@@ -599,8 +607,9 @@ function attachHostListeners() {
     document.getElementById('start-steal-btn').onclick = () => {
         const stealSelect = document.getElementById('steal-target-select');
         stealSelect.innerHTML = '';
-        Object.keys(localGameState.teams).forEach(t => {
-            if (localGameState.teams[t].enabled && t !== localGameState.gameState.currentTeam) {
+        const activeTeams = getActiveTeams(localGameState);
+        activeTeams.forEach(t => {
+            if (t !== localGameState.gameState.currentTeam) {
                 const opt = document.createElement('option');
                 opt.value = t;
                 opt.textContent = localGameState.teams[t].name;
@@ -663,8 +672,71 @@ function attachHostListeners() {
     document.getElementById('close-history-modal').onclick = () => document.getElementById('history-modal').classList.remove('active');
 
     // Settings
-    document.getElementById('settings-btn').onclick = () => document.getElementById('settings-modal').classList.add('active');
+    document.getElementById('settings-btn').onclick = () => {
+        document.getElementById('mute-toggle').checked = isMuted;
+        document.getElementById('settings-modal').classList.add('active');
+    };
     document.getElementById('close-settings-modal').onclick = () => document.getElementById('settings-modal').classList.remove('active');
+
+    // Mute toggle
+    document.getElementById('mute-toggle').onchange = (e) => {
+        isMuted = e.target.checked;
+    };
+
+    // End Game — switch display to highlights mode
+    document.getElementById('end-game-btn').onclick = () => {
+        if (confirm('End the game and show final highlights?')) {
+            roomRef.update({ displayMode: 'highlights' });
+            document.getElementById('settings-modal').classList.remove('active');
+        }
+    };
+
+    // Download CSV of scores + history
+    document.getElementById('dl-csv-btn').onclick = () => {
+        if (!localGameState) return;
+        let csv = 'Team,Score\n';
+        Object.keys(localGameState.teams).filter(t => localGameState.teams[t].enabled).forEach(t => {
+            csv += `"${localGameState.teams[t].name}",${localGameState.teams[t].score || 0}\n`;
+        });
+        csv += '\nTime,Type,Question,Points,Team\n';
+        if (localGameState.history) {
+            const histArr = Object.keys(localGameState.history)
+                .map(k => ({ ...localGameState.history[k] }))
+                .sort((a, b) => a.timestamp - b.timestamp);
+            histArr.forEach(entry => {
+                const d = new Date(entry.timestamp);
+                const timeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                const teamName = entry.team && localGameState.teams[entry.team] ? localGameState.teams[entry.team].name : (entry.team || '');
+                csv += `"${timeStr}","${entry.type}",${entry.qnum},${entry.points},"${teamName}"\n`;
+            });
+        }
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `MechTechFeud_${currentRoomCode}_scores.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Save Highlights PNG screenshot
+    document.getElementById('dl-screenshot-btn').onclick = async () => {
+        const target = document.getElementById('host-live-scores');
+        if (!target || typeof html2canvas === 'undefined') {
+            alert('Screenshot not available.');
+            return;
+        }
+        try {
+            const canvas = await html2canvas(target, { backgroundColor: '#0A0E27' });
+            const link = document.createElement('a');
+            link.download = `MechTechFeud_${currentRoomCode}_scores.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        } catch (err) {
+            console.error('Screenshot error:', err);
+            alert('Failed to capture screenshot.');
+        }
+    };
 
     // QR Code
     document.getElementById('qr-code-btn').onclick = () => {
@@ -927,14 +999,13 @@ function renderHostDashboard(data) {
                 pendingRevealRow = idx;
                 const teamSelect = document.getElementById('reveal-team-select');
                 teamSelect.innerHTML = '';
-                Object.keys(data.teams).forEach(t => {
-                    if (data.teams[t].enabled) {
-                        const opt = document.createElement('option');
-                        opt.value = t;
-                        opt.textContent = data.teams[t].name;
-                        if (t === data.gameState.currentTeam) opt.selected = true;
-                        teamSelect.appendChild(opt);
-                    }
+                const activeTeams = getActiveTeams(data);
+                activeTeams.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = data.teams[t].name;
+                    if (t === data.gameState.currentTeam) opt.selected = true;
+                    teamSelect.appendChild(opt);
                 });
                 
                 document.getElementById('reveal-modal-title').textContent = `Reveal Row ${idx+1} (${ans.points} pts)`;
@@ -977,30 +1048,45 @@ function renderHostDashboard(data) {
         stealZone.classList.remove('hidden');
         document.getElementById('start-steal-btn').classList.add('hidden');
         document.getElementById('end-steal-btn').classList.remove('hidden');
-        stealZone.querySelector('button').nextSibling.textContent = ` Waiting for ${data.gameState.stealingTeam} to steal...`;
+        document.getElementById('fail-steal-btn').classList.remove('hidden');
+        const stealTeamName = data.teams[data.gameState.stealingTeam] ? data.teams[data.gameState.stealingTeam].name : data.gameState.stealingTeam;
+        stealZone.querySelector('.steal-status-text')?.remove();
+        const statusEl = document.createElement('span');
+        statusEl.className = 'steal-status-text';
+        statusEl.style.color = 'var(--yellow)';
+        statusEl.textContent = ` Waiting for ${stealTeamName} to steal...`;
+        stealZone.appendChild(statusEl);
     } else {
         stealZone.classList.add('hidden');
         document.getElementById('start-steal-btn').classList.remove('hidden');
         document.getElementById('end-steal-btn').classList.add('hidden');
+        document.getElementById('fail-steal-btn').classList.add('hidden');
     }
 
     // Teams Control
     const currentTeamSel = document.getElementById('current-team-select');
     const f1Sel = document.getElementById('faceoff-team-1');
     const f2Sel = document.getElementById('faceoff-team-2');
+    const allEnabledTeams = Object.keys(data.teams).filter(t => data.teams[t].enabled);
+    const activeTeams = getActiveTeams(data);
 
-    if (currentTeamSel.options.length === 0) {
-        Object.keys(data.teams).forEach(t => {
-            if (data.teams[t].enabled) {
-                const opt1 = document.createElement('option');
-                opt1.value = t; opt1.textContent = data.teams[t].name;
-                currentTeamSel.appendChild(opt1);
-                
-                const opt2 = opt1.cloneNode(true);
-                const opt3 = opt1.cloneNode(true);
-                f1Sel.appendChild(opt2);
-                f2Sel.appendChild(opt3);
-            }
+    // Rebuild current-team dropdown: show only active (face-off filtered) teams
+    currentTeamSel.innerHTML = '';
+    activeTeams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = data.teams[t].name;
+        currentTeamSel.appendChild(opt);
+    });
+    currentTeamSel.value = data.gameState.currentTeam;
+
+    // Faceoff dropdowns always show ALL enabled teams (so host can pick any pair)
+    if (f1Sel.options.length === 0) {
+        allEnabledTeams.forEach(t => {
+            const opt1 = document.createElement('option');
+            opt1.value = t; opt1.textContent = data.teams[t].name;
+            f1Sel.appendChild(opt1.cloneNode(true));
+            f2Sel.appendChild(opt1.cloneNode(true));
         });
 
         // Prevent selecting the same team
@@ -1014,8 +1100,14 @@ function renderHostDashboard(data) {
                 opt.disabled = (opt.value === f2Sel.value);
             });
         };
+
+        // Initial disable: prevent Team A vs Team A on first load
+        if (f1Sel.value) {
+            Array.from(f2Sel.options).forEach(opt => {
+                opt.disabled = (opt.value === f1Sel.value);
+            });
+        }
     }
-    currentTeamSel.value = data.gameState.currentTeam;
     
     if (data.gameState.faceoffTeams) {
         f1Sel.value = data.gameState.faceoffTeams[0];
@@ -1027,10 +1119,11 @@ function renderHostDashboard(data) {
         document.getElementById('apply-faceoff-btn').textContent = "Apply";
     }
 
-    // Roster & Buzzes
+    // Roster & Buzzes — filtered by face-off
     const roster = document.getElementById('host-roster');
     roster.innerHTML = '';
-    Object.keys(data.teams).filter(t => data.teams[t].enabled).forEach(t => {
+    const rosterTeams = getActiveTeams(data);
+    rosterTeams.forEach(t => {
         const teamDiv = document.createElement('div');
         teamDiv.className = 'roster-team';
         teamDiv.style.borderLeftColor = data.teams[t].color;
@@ -1046,7 +1139,6 @@ function renderHostDashboard(data) {
                     
                     let buzzStatus = '';
                     if (data.buzzes && data.buzzes[pId]) {
-                        // Very rough time calc, host UI just shows they buzzed
                         buzzStatus = `<span class="buzz-time-badge">BUZZED</span>`;
                     }
                     
@@ -1099,14 +1191,13 @@ function renderHostDashboard(data) {
         };
     });
 
-    // Live Scores Bottom
+    // Live Scores Bottom — filtered by face-off
     const scoresFooter = document.getElementById('host-live-scores');
     scoresFooter.innerHTML = '';
-    const sortedTeams = Object.keys(data.teams)
-        .filter(t => data.teams[t].enabled)
+    const scoreTeams = getActiveTeams(data)
         .sort((a,b) => (data.teams[b].score || 0) - (data.teams[a].score || 0));
         
-    sortedTeams.forEach(t => {
+    scoreTeams.forEach(t => {
         const sbox = document.createElement('div');
         sbox.className = 'host-score-box';
         sbox.style.borderColor = data.teams[t].color;
@@ -1207,7 +1298,12 @@ function renderDisplay(data) {
     else if (mode === 'highlights') {
         const hMode = document.getElementById('display-mode-highlights');
         hMode.classList.remove('hidden');
-        // Implement podium logic here if needed
+        renderPodium(data);
+        if (mode !== lastDisplayMode) {
+            triggerConfetti();
+            setTimeout(triggerConfetti, 1000);
+            setTimeout(triggerConfetti, 2000);
+        }
     }
 
     lastDisplayMode = mode;
@@ -1385,6 +1481,38 @@ function triggerConfetti() {
     });
 }
 
+function renderPodium(data) {
+    const container = document.getElementById('podium-container');
+    container.innerHTML = '';
+
+    const teams = Object.keys(data.teams)
+        .filter(t => data.teams[t].enabled)
+        .sort((a, b) => (data.teams[b].score || 0) - (data.teams[a].score || 0));
+
+    if (teams.length === 0) return;
+
+    const medals = ['🥇', '🥈', '🥉'];
+    const maxScore = data.teams[teams[0]].score || 1;
+
+    teams.forEach((t, idx) => {
+        const team = data.teams[t];
+        const barHeight = Math.max(20, ((team.score || 0) / maxScore) * 100);
+        const medal = idx < 3 ? medals[idx] : `#${idx + 1}`;
+
+        const podiumItem = document.createElement('div');
+        podiumItem.className = 'podium-item';
+        podiumItem.style.animationDelay = `${idx * 0.3}s`;
+        podiumItem.innerHTML = `
+            <div class="podium-medal">${medal}</div>
+            <div class="podium-team-name" style="color: ${team.color}">${team.name}</div>
+            <div class="podium-bar-wrapper">
+                <div class="podium-bar" style="height: ${barHeight}%; background: ${team.color}; animation-delay: ${idx * 0.3}s;"></div>
+            </div>
+            <div class="podium-score" style="color: ${team.color}">${team.score || 0}</div>
+        `;
+        container.appendChild(podiumItem);
+    });
+}
 
 // ==========================================
 // PLAYER LOGIC

@@ -293,7 +293,7 @@
     </div>
 
     <!-- History Modal -->
-    <div id="history-modal" class="modal-overlay">
+    <div id="history-modal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
                 <h2 id="history-modal-title">📊 History & Scores</h2>
@@ -334,6 +334,10 @@
             <span class="close-btn" id="close-settings-modal">&times;</span>
             <h3>Settings</h3>
             <div class="settings-actions">
+                <label class="settings-toggle">
+                    <input type="checkbox" id="mute-toggle"> 🔇 Mute All Sounds
+                </label>
+                <hr style="border-color: var(--border-color); margin: 0.5rem 0;">
                 <button id="end-game-btn" class="btn btn-red">End Game & Show Highlights</button>
                 <button id="dl-csv-btn" class="btn btn-gray">Download Score CSV</button>
                 <button id="dl-screenshot-btn" class="btn btn-cyan">Save Highlights PNG</button>

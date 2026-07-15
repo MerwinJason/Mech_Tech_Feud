@@ -1213,3 +1213,96 @@ html, body {
     border-radius: 4px;
     text-align: center;
 }
+
+/* --- PODIUM / HIGHLIGHTS --- */
+.podium-container {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2rem;
+    width: 80%;
+    max-width: 900px;
+    height: 50vh;
+    margin-top: 2rem;
+}
+.podium-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    max-width: 180px;
+    animation: podiumFadeIn 0.8s ease-out both;
+}
+@keyframes podiumFadeIn {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.podium-medal {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+.podium-team-name {
+    font-family: var(--font-heading);
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    text-align: center;
+    word-break: break-word;
+}
+.podium-bar-wrapper {
+    width: 100%;
+    height: 200px;
+    display: flex;
+    align-items: flex-end;
+}
+.podium-bar {
+    width: 100%;
+    border-radius: 8px 8px 0 0;
+    min-height: 20px;
+    animation: barGrow 1.2s cubic-bezier(0.25, 1, 0.5, 1) both;
+    box-shadow: 0 0 20px currentColor;
+}
+@keyframes barGrow {
+    from { height: 0 !important; }
+}
+.podium-score {
+    font-family: var(--font-heading);
+    font-size: 2.5rem;
+    margin-top: 0.5rem;
+}
+
+.highlights-carousel {
+    margin-top: 2rem;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* --- SETTINGS TOGGLE --- */
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+.settings-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--cyan);
+    cursor: pointer;
+}
+.settings-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+/* --- STEAL STATUS --- */
+.steal-status-text {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
