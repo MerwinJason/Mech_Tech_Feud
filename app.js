@@ -1124,9 +1124,6 @@ function renderHostDashboard(data) {
 // ==========================================
 // DISPLAY LOGIC
 // ==========================================
-let lastRevealedState = {};
-let lastStrikeCount = 0;
-let lastDisplayMode = '';
 
 function initDisplayView() {
     if (!currentRoomCode) {
