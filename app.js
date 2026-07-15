@@ -27,8 +27,6 @@ let lastStrikeCount = 0;
 let lastRevealedState = {};
 let lastFirstBuzzTimestamp = null;
 
-const TEAM_COLORS = {};
-
 // DOM Elements - General
 const views = {
     landing: document.getElementById('landing-view'),
