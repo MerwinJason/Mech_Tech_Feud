@@ -523,7 +523,7 @@ function attachHostListeners() {
         if (localGameState.currentQuestionIdx > 0) {
             roomRef.update({
                 currentQuestionIdx: localGameState.currentQuestionIdx - 1,
-                displayMode: 'intro',
+                displayMode: 'filler',
                 'gameState/strikes': 0,
                 'gameState/stealActive': false,
                 'gameState/buzzerMode': 'off'
@@ -534,7 +534,7 @@ function attachHostListeners() {
         if (localGameState.questions && localGameState.currentQuestionIdx < localGameState.questions.length - 1) {
             roomRef.update({
                 currentQuestionIdx: localGameState.currentQuestionIdx + 1,
-                displayMode: 'intro',
+                displayMode: 'filler',
                 'gameState/strikes': 0,
                 'gameState/stealActive': false,
                 'gameState/buzzerMode': 'off'
@@ -751,6 +751,165 @@ function attachHostListeners() {
         navigator.clipboard.writeText(currentRoomCode);
         alert("Copied room code: " + currentRoomCode);
     };
+
+    // Go Live Panel — Toggle collapse
+    document.getElementById('go-live-toggle').onclick = () => {
+        const body = document.getElementById('go-live-body');
+        const chevron = document.getElementById('go-live-chevron');
+        body.classList.toggle('collapsed');
+        chevron.classList.toggle('collapsed');
+    };
+
+    // Go Live Panel — Show/hide player checklist based on buzzer mode
+    document.getElementById('gl-buzzer-mode').onchange = (e) => {
+        const checklist = document.getElementById('gl-player-checklist');
+        if (e.target.value === 'selected') {
+            checklist.classList.remove('hidden');
+        } else {
+            checklist.classList.add('hidden');
+        }
+    };
+
+    // Go Live Button — Push all staging config to Firebase at once
+    document.getElementById('go-live-btn').onclick = async () => {
+        const qSelect = document.getElementById('gl-question-select');
+        const displayMode = document.getElementById('gl-display-mode').value;
+        const buzzerMode = document.getElementById('gl-buzzer-mode').value;
+        const newQIdx = parseInt(qSelect.value);
+
+        const updates = {
+            currentQuestionIdx: newQIdx,
+            displayMode: displayMode,
+            'gameState/buzzerMode': buzzerMode,
+            'gameState/strikes': 0,
+            'gameState/stealActive': false,
+            'gameState/stealingTeam': null,
+            buzzes: null
+        };
+
+        // Batch update all player buzzEligible flags
+        if (localGameState.players) {
+            Object.keys(localGameState.players).forEach(pId => {
+                if (buzzerMode === 'selected') {
+                    const cb = document.getElementById(`gl-cb-${pId}`);
+                    updates[`players/${pId}/buzzEligible`] = cb ? cb.checked : false;
+                } else if (buzzerMode === 'all') {
+                    updates[`players/${pId}/buzzEligible`] = false;
+                } else {
+                    updates[`players/${pId}/buzzEligible`] = false;
+                }
+            });
+        }
+
+        // Clear revealed answers if switching to a different question
+        if (newQIdx !== localGameState.currentQuestionIdx) {
+            // Reset revealed for old question is handled by display logic
+            // (revealed keys are namespaced by qnum so they don't collide)
+        }
+
+        await database.ref(`feud-rooms/${currentRoomCode}`).update(updates);
+
+        // Flash confirmation
+        const btn = document.getElementById('go-live-btn');
+        btn.textContent = '✅ LIVE!';
+        btn.classList.replace('btn-green', 'btn-cyan');
+        setTimeout(() => {
+            btn.textContent = '🚀 GO LIVE';
+            btn.classList.replace('btn-cyan', 'btn-green');
+        }, 1500);
+    };
+}
+
+// Go Live Panel — Render staging controls from current game state
+function renderGoLivePanel(data) {
+    if (!data.questions) return;
+
+    // Question selector
+    const qSelect = document.getElementById('gl-question-select');
+    const currentVal = qSelect.value;
+    qSelect.innerHTML = '';
+    data.questions.forEach((q, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = `Q${idx + 1}: ${q.question.substring(0, 50)}${q.question.length > 50 ? '…' : ''}`;
+        qSelect.appendChild(opt);
+    });
+    // Default to current question, but preserve user selection if they changed it
+    if (currentVal !== '' && parseInt(currentVal) < data.questions.length) {
+        qSelect.value = currentVal;
+    } else {
+        qSelect.value = data.currentQuestionIdx;
+    }
+
+    // Sync buzzer mode dropdown (only if user hasn't manually changed it)
+    // We set it on first render and leave it alone after that
+    const glBuzzerMode = document.getElementById('gl-buzzer-mode');
+    if (!glBuzzerMode.dataset.userTouched) {
+        glBuzzerMode.value = data.gameState.buzzerMode;
+        // Show/hide checklist
+        if (data.gameState.buzzerMode === 'selected') {
+            document.getElementById('gl-player-checklist').classList.remove('hidden');
+        }
+    }
+    // Mark as user-touched on first change
+    if (!glBuzzerMode._listenerAttached) {
+        glBuzzerMode.addEventListener('change', () => {
+            glBuzzerMode.dataset.userTouched = 'true';
+        });
+        glBuzzerMode._listenerAttached = true;
+    }
+
+    // Player checklist
+    const checklist = document.getElementById('gl-player-checklist');
+    if (data.players) {
+        // Only rebuild if player count changed (to preserve checkbox state)
+        const currentCheckboxes = checklist.querySelectorAll('input[type="checkbox"]');
+        const playerIds = Object.keys(data.players);
+        
+        if (currentCheckboxes.length !== playerIds.length) {
+            checklist.innerHTML = '';
+
+            // Select All / None row
+            const selectRow = document.createElement('div');
+            selectRow.className = 'gl-select-all-row';
+            selectRow.innerHTML = `
+                <button id="gl-select-all">Select All</button>
+                <button id="gl-select-none">Clear All</button>
+            `;
+            checklist.appendChild(selectRow);
+
+            // Build player items grouped by team
+            const activeTeams = getActiveTeams(data);
+            activeTeams.forEach(t => {
+                const teamPlayers = playerIds.filter(pId => data.players[pId].team === t);
+                if (teamPlayers.length === 0) return;
+
+                teamPlayers.forEach(pId => {
+                    const p = data.players[pId];
+                    const item = document.createElement('div');
+                    item.className = 'gl-player-item';
+                    item.innerHTML = `
+                        <input type="checkbox" id="gl-cb-${pId}" ${p.buzzEligible ? 'checked' : ''}>
+                        <label for="gl-cb-${pId}">
+                            ${p.name}
+                            <span class="gl-team-label" style="background:${data.teams[t].color}">${data.teams[t].name}</span>
+                        </label>
+                    `;
+                    checklist.appendChild(item);
+                });
+            });
+
+            // Wire Select All / None
+            document.getElementById('gl-select-all').onclick = () => {
+                checklist.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+            };
+            document.getElementById('gl-select-none').onclick = () => {
+                checklist.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+            };
+        }
+    } else {
+        checklist.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.85rem; text-align: center;">No players joined yet</div>';
+    }
 }
 
 async function processReveal(rowIdx, teamId) {
@@ -983,8 +1142,8 @@ function renderHostDashboard(data) {
         row.className = `host-row ${isRevealed ? 'revealed' : ''}`;
         
         const rank = `<div class="row-rank">${idx + 1}</div>`;
-        const text = `<div class="row-text">${isRevealed ? ans.text : '??? hidden ???'}</div>`;
-        const pts = `<div class="row-pts">${isRevealed ? ans.points : '--'}</div>`;
+        const text = `<div class="row-text">${ans.text}</div>`;
+        const pts = `<div class="row-pts">${ans.points}</div>`;
         
         let badge = '';
         if (isRevealed && isRevealed.awardedTo) {
@@ -1210,6 +1369,9 @@ function renderHostDashboard(data) {
         `;
         scoresFooter.appendChild(sbox);
     });
+
+    // Render Go Live staging panel
+    renderGoLivePanel(data);
 }
 
 // ==========================================
