@@ -856,6 +856,7 @@ html, body {
     align-items: center;
     justify-content: center;
     padding: 2rem;
+    padding-top: 90px; /* reserve space so the brand logos don't overlap the question box */
 }
 .glowing-card {
     background: var(--surface-color);
@@ -1133,7 +1134,7 @@ html, body {
 
 .volume-control {
     position: absolute;
-    top: 1rem;
+    top: 84px; /* drop below the brand bar so the Lennox logo doesn't cover the sound button */
     right: 1rem;
     font-size: 2rem;
     opacity: 0.5;
