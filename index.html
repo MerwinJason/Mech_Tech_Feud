@@ -206,10 +206,13 @@
 
         <!-- 3. DISPLAY VIEW -->
         <div id="display-view" class="view">
-            <!-- Brand logos (Mech Tech Fun + Lennox) -->
+            <!-- Brand logos (Mech Tech Fun + Lennox) + sound toggle, all inside the reserved top band -->
             <div class="brand-bar">
                 <img src="assets/mechtechfun-logo.png" alt="Mech Tech Fun" class="brand-logo brand-mtf" onerror="this.style.display='none'">
-                <img src="assets/lennox-logo.png" alt="Lennox" class="brand-logo brand-lennox" onerror="this.style.display='none'">
+                <div class="brand-right">
+                    <div id="display-volume" class="volume-control">🔊</div>
+                    <img src="assets/lennox-logo.png" alt="Lennox" class="brand-logo brand-lennox" onerror="this.style.display='none'">
+                </div>
             </div>
             <!-- Mode A: Intro -->
             <div id="display-mode-intro" class="display-mode hidden">
@@ -271,8 +274,6 @@
                     <!-- Highlights cycle here -->
                 </div>
             </div>
-            
-            <div id="display-volume" class="volume-control">🔊</div>
         </div>
 
         <!-- 4. PLAYER VIEW -->
